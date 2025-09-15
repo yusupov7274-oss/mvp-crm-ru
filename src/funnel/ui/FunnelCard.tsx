@@ -111,4 +111,4 @@ const grid3: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat
 const totals: React.CSSProperties = { display:'flex', flexWrap:'wrap', gap:8, marginTop:8 };
 const inp: React.CSSProperties = { width:'100%', padding:'8px 10px', border:'1px solid #cfd3d8', borderRadius:10, fontSize:14, outline:'none' };
 const btnPrimary: React.CSSProperties = { padding:'8px 12px', borderRadius:10, border:'1px solid #111', background:'#111', color:'#fff', cursor:'pointer' };
-const btnDanger: React.CSSProperties = { padding:'8px 12px', borderRadius:10, border:'1px solid '#dc2626', background:'#fef2f2', color:'#b91c1c', cursor:'pointer' };
+const btnDanger: React.CSSProperties = { padding:'8px 12px', borderRadius:10, border:'1px solid #dc2626', background:'#fef2f2', color:'#b91c1c', cursor:'pointer' };
