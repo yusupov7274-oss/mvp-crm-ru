@@ -1,5 +1,4 @@
-// File: src/App.tsx
-// Маршруты: список, биржа, карточка, финансы, воронка
+// Маршруты: список, биржа, карточка, финансы, воронка, сводная
 
 import React from 'react';
 import { AuthProvider, LoginScreen, useAuth } from './AuthGate';
@@ -10,6 +9,7 @@ import * as bizRepo from './business/repo.local';
 import { Business } from './business/types';
 import FinancialsCard from './financials/ui/FinancialsCard';
 import FunnelCard from './funnel/ui/FunnelCard';
+import SummaryTable from './summary/ui/SummaryTable';
 
 /* ───────────── Hash-роутер ───────────── */
 type Route =
@@ -17,7 +17,8 @@ type Route =
   | { name: 'pool' }
   | { name: 'business'; id: string }
   | { name: 'financials'; id: string }
-  | { name: 'funnel'; id: string };
+  | { name: 'funnel'; id: string }
+  | { name: 'summary'; id: string };
 
 function parseHash(): Route {
   const h = (location.hash || '').replace(/^#/, '');
@@ -27,6 +28,7 @@ function parseHash(): Route {
   if (a === 'business' && b) return { name: 'business', id: b };
   if (a === 'financials' && b) return { name: 'financials', id: b };
   if (a === 'funnel' && b) return { name: 'funnel', id: b };
+  if (a === 'summary' && b) return { name: 'summary', id: b };
   return { name: 'home' };
 }
 function useHashRoute(): [Route] {
@@ -150,6 +152,11 @@ function BusinessCardScreen({ id }: { id: string }) {
             Воронка
           </a>
         )}
+        {perms?.viewSummary && (
+          <a style={btnPrimary as any} href={`#/summary/${b.id}`}>
+            Сводная
+          </a>
+        )}
       </div>
     </div>
   );
@@ -205,6 +212,31 @@ function FunnelScreen({ id }: { id: string }) {
   );
 }
 
+/* ───────────── Экран сводной ───────────── */
+function SummaryScreen({ id }: { id: string }) {
+  const { perms } = useAuth();
+  const [biz, setBiz] = React.useState<Business | null>(null);
+
+  React.useEffect(() => {
+    bizRepo.get(id).then(setBiz);
+  }, [id]);
+
+  if (!perms?.viewSummary) return <div style={{ padding: 12, color: '#b91c1c' }}>Нет прав доступа</div>;
+  if (!biz) return <div style={{ padding: 12 }}>Загрузка…</div>;
+
+  return (
+    <div>
+      <div style={rowBetween}>
+        <h2 style={{ margin: 0 }}>Сводная: {biz.title || 'Без названия'}</h2>
+        <a style={btnGhost as any} href={`#/business/${biz.id}`}>
+          К карточке бизнеса
+        </a>
+      </div>
+      <SummaryTable business={biz} canExport={true} />
+    </div>
+  );
+}
+
 /* ───────────── Навбар ───────────── */
 function NavBar() {
   const { user, logout } = useAuth();
@@ -245,6 +277,7 @@ function Shell() {
       {route.name === 'business' && <BusinessCardScreen id={route.id} />}
       {route.name === 'financials' && <FinancialsScreen id={route.id} />}
       {route.name === 'funnel' && <FunnelScreen id={route.id} />}
+      {route.name === 'summary' && <SummaryScreen id={route.id} />}
     </div>
   );
 }
@@ -331,7 +364,7 @@ const btnPrimary: React.CSSProperties = {
 const btnDanger: React.CSSProperties = {
   padding: '8px 12px',
   borderRadius: 10,
-  border: '1px solid #dc2626', // ВАЖНО: без лишних кавычек внутри строки
+  border: '1px solid #dc2626',
   background: '#fef2f2',
   color: '#b91c1c',
   cursor: 'pointer',
