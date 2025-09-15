@@ -1,284 +1,159 @@
-// ПРИЛОЖЕНИЕ: вход по логину/паролю, разграничение прав,
-// панель владельца для управления аккаунтами/доступами.
+// Обновлённый App: маршруты (hash), список бизнесов, биржа, карточка, панель владельца.
 
 import React from 'react';
 import { AuthProvider, LoginScreen, useAuth } from './AuthGate';
-import { roleTitle, Permissions, Role } from './roles';
-import {
-  addUser,
-  listUsers,
-  permsForUser,
-  removeUser,
-  updateUser,
-  UserRecord,
-} from './UserStore';
+import { roleTitle } from './roles';
+import BusinessList from './business/ui/BusinessList';
+import BusinessPool from './business/ui/BusinessPool';
+import * as bizRepo from './business/repo.local';
+import { Business } from './business/types';
 
-/* ───────────────── Заглушка карточки бизнеса ───────────────── */
-function BusinessCardBare() {
-  const [title, setTitle] = React.useState(localStorage.getItem('card_title') || '');
-  const [city, setCity] = React.useState(localStorage.getItem('card_city') || '');
-  const [direction, setDirection] = React.useState(localStorage.getItem('card_dir') || '');
-  const [contacts, setContacts] = React.useState(localStorage.getItem('card_contacts') || '');
-  React.useEffect(() => {
-    localStorage.setItem('card_title', title);
-    localStorage.setItem('card_city', city);
-    localStorage.setItem('card_dir', direction);
-    localStorage.setItem('card_contacts', contacts);
-  }, [title, city, direction, contacts]);
+/* ───────────── Простенький hash-роутер ───────────── */
+type Route =
+  | { name: 'home' }
+  | { name: 'pool' }
+  | { name: 'business'; id: string };
 
-  return (
-    <div style={card}>
-      <h3 style={{ marginTop: 0 }}>Карточка бизнеса</h3>
-      <label style={lbl}>
-        Название
-        <input style={inp} value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <label style={lbl}>
-        Город
-        <input style={inp} value={city} onChange={(e) => setCity(e.target.value)} />
-      </label>
-      <label style={lbl}>
-        Направление
-        <input style={inp} value={direction} onChange={(e) => setDirection(e.target.value)} />
-      </label>
-      <label style={lbl}>
-        Контакты
-        <textarea
-          style={{ ...inp, height: 90 }}
-          value={contacts}
-          onChange={(e) => setContacts(e.target.value)}
-        />
-      </label>
-      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
-        Демо: данные этой карточки сохраняются в браузере (localStorage).
-      </div>
-    </div>
-  );
+function parseHash(): Route {
+  const h = (location.hash || '').replace(/^#/, '');
+  const [a, b, c] = h.split('/').filter(Boolean);
+  if (!a) return { name: 'home' };
+  if (a === 'pool') return { name: 'pool' };
+  if (a === 'business' && b) return { name: 'business', id: b };
+  return { name: 'home' };
 }
 
-/* ───────────────── Панель владельца: пользователи/роли/пароли ───────────────── */
-function OwnerPanel() {
-  const [users, setUsers] = React.useState<UserRecord[]>(listUsers());
-  const [form, setForm] = React.useState({ name: '', role: 'manager' as Role, login: '', password: '' });
+function useHashRoute(): [Route, (r: Route)=>void] {
+  const [route, setRoute] = React.useState<Route>(()=>parseHash());
+  React.useEffect(()=>{
+    const on = () => setRoute(parseHash());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  const go = (r: Route) => {
+    if (r.name === 'home') location.hash = '#/';
+    if (r.name === 'pool') location.hash = '#/pool';
+    if (r.name === 'business') location.hash = `#/business/${r.id}`;
+  };
+  return [route, go];
+}
 
-  const reload = () => setUsers(listUsers());
+/* ───────────── Карточка бизнеса (минимум полей, редактирование по правам) ───────────── */
+function BusinessCardScreen({ id }: { id: string }) {
+  const { perms } = useAuth();
+  const [b, setB] = React.useState<Business | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
-  function create() {
-    if (!form.login || !form.password) {
-      alert('Укажите логин и временный пароль');
-      return;
-    }
-    try {
-      addUser(form);
-      setForm({ name: '', role: 'manager', login: '', password: '' });
-      reload();
-    } catch (e: any) {
-      alert(e?.message || String(e));
-    }
+  async function load() {
+    setLoading(true);
+    try { setB(await bizRepo.get(id)); }
+    finally { setLoading(false); }
+  }
+  React.useEffect(()=>{ load(); }, [id]);
+
+  async function save(patch: Partial<Business>) {
+    if (!perms?.editBusiness){ alert('Нет прав на редактирование'); return; }
+    const next = await bizRepo.update(id, patch);
+    setB(next);
   }
 
-  function setRoleFor(id: string, role: Role) {
-    updateUser(id, { role });
-    reload();
+  async function unassign() {
+    if (!perms?.assignBusinesses){ alert('Нет прав'); return; }
+    await bizRepo.assign(id, null);
+    await load();
   }
 
-  function setOverride(id: string, key: keyof Permissions, val: boolean) {
-    const u = users.find((x) => x.id === id);
-    if (!u) return;
-    const next = { ...(u.permsOverride || {}), [key]: val };
-    updateUser(id, { permsOverride: next });
-    reload();
-  }
-
-  function changePass(id: string) {
-    const pwd = prompt('Новый пароль:');
-    if (!pwd) return;
-    updateUser(id, { password: pwd });
-    alert('Пароль обновлён');
-    reload();
-  }
-
-  function del(id: string) {
-    if (!confirm('Удалить пользователя?')) return;
-    removeUser(id);
-    reload();
-  }
+  if (loading) return <div style={{padding:12}}>Загрузка…</div>;
+  if (!b) return <div style={{padding:12, color:'#b91c1c'}}>Бизнес не найден</div>;
 
   return (
     <div style={card}>
-      <h3 style={{ marginTop: 0 }}>Пользователи и доступы (только владелец)</h3>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <label style={lbl}>
-          Имя
-          <input
-            style={inp}
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </label>
-        <label style={lbl}>
-          Логин
-          <input
-            style={inp}
-            value={form.login}
-            onChange={(e) => setForm({ ...form, login: e.target.value })}
-          />
-        </label>
-        <label style={lbl}>
-          Пароль (временный)
-          <input
-            style={inp}
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-        </label>
-        <label style={lbl}>
-          Роль
-          <select
-            style={inp}
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
-          >
-            <option value="manager">Менеджер</option>
-            <option value="seller">Собственник</option>
-            <option value="buyer">Покупатель</option>
-            <option value="owner">Владелец</option>
+      <h3 style={{marginTop:0}}>Карточка бизнеса</h3>
+      <div style={grid2}>
+        <Field label="Название">
+          <input style={inp} value={b.title} onChange={e=>save({title:e.target.value})} disabled={!perms?.editBusiness} />
+        </Field>
+        <Field label="Город">
+          <input style={inp} value={b.city} onChange={e=>save({city:e.target.value})} disabled={!perms?.editBusiness} />
+        </Field>
+        <Field label="Направление" span2>
+          <input style={inp} value={b.direction} onChange={e=>save({direction:e.target.value})} disabled={!perms?.editBusiness} />
+        </Field>
+        <Field label="Тип">
+          <select style={inp} value={b.kind} onChange={e=>save({kind: e.target.value as any})} disabled={!perms?.editBusiness}>
+            <option value="own">Собственный</option>
+            <option value="franchise">Франшизный</option>
           </select>
-        </label>
+        </Field>
+        <Field label="Валюта">
+          <select style={inp} value={b.currency} onChange={e=>save({currency: e.target.value as any})} disabled={!perms?.editBusiness}>
+            <option value="RUB">₽ RUB</option>
+            <option value="BYN">Br BYN</option>
+            <option value="KZT">₸ KZT</option>
+          </select>
+        </Field>
+        <Field label="Контакты собственника" span2>
+          <input style={inp} value={b.ownerContact} onChange={e=>save({ownerContact:e.target.value})} disabled={!perms?.editBusiness} />
+        </Field>
+        <Field label="Статус" span2>
+          <select style={inp} value={b.status} onChange={e=>save({status: e.target.value as any})} disabled={!perms?.editBusiness}>
+            {['new','assigned','primary_collected','price_estimated','price_agreed','buyers_base_formed','meetings','approved_buyer','buyer_has_money','signing','sold','archived']
+              .map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        <button style={btnPrimary} onClick={create}>
-          Добавить пользователя
-        </button>
+      <div style={{display:'flex', gap:8, marginTop:8}}>
+        <button style={btnGhost} onClick={()=> location.hash = '#/'}>К списку</button>
+        {'assignBusinesses' in (perms||{}) && perms?.assignBusinesses && (
+          <button style={btnDanger} onClick={unassign}>Снять ответственного (в биржу)</button>
+        )}
       </div>
-
-      <hr style={hr} />
-
-      {users.map((u) => {
-        const eff = permsForUser(u);
-        return (
-          <div key={u.id} style={{ borderTop: '1px solid #f1f1f1', paddingTop: 8, marginTop: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <b>{u.name}</b> · {u.login} · {roleTitle(u.role)}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button style={btnGhost} onClick={() => changePass(u.id)}>
-                  Сменить пароль
-                </button>
-                <select
-                  style={inp}
-                  value={u.role}
-                  onChange={(e) => setRoleFor(u.id, e.target.value as Role)}
-                >
-                  <option value="owner">Владелец</option>
-                  <option value="manager">Менеджер</option>
-                  <option value="seller">Собственник</option>
-                  <option value="buyer">Покупатель</option>
-                </select>
-                <button style={btnDanger} onClick={() => del(u.id)}>
-                  Удалить
-                </button>
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
-              Переопределение прав (галочка = включено):
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0,1fr))',
-                gap: 6,
-                marginTop: 6,
-              }}
-            >
-              {(
-                [
-                  'manageUsers',
-                  'viewBusiness',
-                  'editBusiness',
-                  'viewFinancials',
-                  'editFinancials',
-                  'viewFunnel',
-                  'editFunnel',
-                  'viewSummary',
-                ] as (keyof Permissions)[]
-              ).map((k) => (
-                <label
-                  key={k}
-                  style={{
-                    fontSize: 12,
-                    display: 'flex',
-                    gap: 6,
-                    alignItems: 'center',
-                    border: '1px solid #eee',
-                    borderRadius: 8,
-                    padding: '6px 8px',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={u.permsOverride?.[k] ?? eff[k]}
-                    onChange={(e) => setOverride(u.id, k, e.target.checked)}
-                  />
-                  <span>{k}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
 
-/* ───────────────── Верхняя панель ───────────────── */
-function Topbar() {
-  const { user, logout } = useAuth();
-  if (!user) return null;
+/* ───────────── Верхнее меню ───────────── */
+function NavBar(){
+  const { user, perms, logout } = useAuth();
   return (
     <div style={topbar}>
-      <div>
-        <b>{user.name}</b> · {roleTitle(user.role)}
+      <div style={{display:'flex', gap:8, alignItems:'center'}}>
+        <a href="#/" style={link}>Бизнесы</a>
+        {perms?.assignBusinesses && <a href="#/pool" style={link}>Биржа</a>}
       </div>
-      <button style={btnGhost} onClick={logout}>
-        Выйти
-      </button>
+      <div style={{display:'flex', gap:12, alignItems:'center'}}>
+        <span style={{fontSize:12, color:'#6b7280'}}>{user?.name} · {user ? roleTitle(user.role) : ''}</span>
+        <button style={btnGhost} onClick={logout}>Выйти</button>
+      </div>
     </div>
   );
 }
 
-/* ───────────────── Основная обвязка ───────────────── */
-function Shell() {
+/* ───────────── Оболочка приложения ───────────── */
+function Shell(){
   const { user, perms } = useAuth();
+  const [route] = useHashRoute();
+
   if (!user || !perms) return <LoginScreen />;
 
   return (
     <div style={page}>
-      <Topbar />
-      <h1 style={{ marginTop: 8 }}>CRM для продажи бизнесов</h1>
-      <p style={{ color: '#6b7280', marginTop: 0 }}>
-        Доступы управляются владельцем. Текущая роль: {roleTitle(user.role)}
-      </p>
+      <NavBar />
 
-      {/* Всегда видна карточка бизнеса (редактирование позже ограничим по perms.editBusiness) */}
-      <BusinessCardBare />
+      {route.name === 'home' && <BusinessList />}
 
-      {/* Панель владельца — только при праве manageUsers */}
-      {perms.manageUsers && (
-        <>
-          <hr style={hr} />
-          <OwnerPanel />
-        </>
+      {route.name === 'pool' && (perms.assignBusinesses
+        ? <BusinessPool />
+        : <div style={{padding:12, color:'#b91c1c'}}>Нет прав доступа</div>
       )}
+
+      {route.name === 'business' && <BusinessCardScreen id={route.id} />}
     </div>
   );
 }
 
-export default function App() {
+export default function App(){
   return (
     <AuthProvider>
       <Shell />
@@ -286,73 +161,19 @@ export default function App() {
   );
 }
 
-/* ───────────────── Стили ───────────────── */
-const page: React.CSSProperties = {
-  padding: '24px',
-  fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
-  maxWidth: 980,
-  margin: '0 auto',
-};
+/* ───────────── Мелкие утилиты/стили ───────────── */
+function Field(p:{label:string; children:React.ReactNode; span2?:boolean}){
+  return <label style={{display:'block', gridColumn: p.span2?'1 / span 2': undefined}}>
+    <div style={{fontSize:12, color:'#6b7280', margin:'8px 0 4px'}}>{p.label}</div>
+    {p.children}
+  </label>;
+}
 
-const topbar: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '10px 12px',
-  border: '1px solid #e5e7eb',
-  borderRadius: 12,
-  background: '#fff',
-  marginBottom: 12,
-};
-
-const card: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e5e7eb',
-  borderRadius: 12,
-  padding: 12,
-  maxWidth: 900,
-};
-
-const lbl: React.CSSProperties = {
-  display: 'block',
-  fontSize: 12,
-  color: '#6b7280',
-  margin: '8px 0 4px',
-};
-
-const inp: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1px solid #cfd3d8',
-  borderRadius: 10,
-  fontSize: 14,
-  outline: 'none',
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 10,
-  border: '1px solid #111',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: '8px 12px',
-  borderRadius: 10,
-  border: '1px solid #cfd3d8',
-  background: '#fff',
-  cursor: 'pointer',
-};
-
-const btnDanger: React.CSSProperties = {
-  padding: '8px 12px',
-  borderRadius: 10,
-  border: '1px solid #dc2626',
-  background: '#fef2f2',
-  color: '#b91c1c',
-  cursor: 'pointer',
-};
-
-const hr: React.CSSProperties = { margin: '16px 0', border: 0, borderTop: '1px solid #eee' };
+const page: React.CSSProperties = { padding:'24px', fontFamily:'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth:1024, margin:'0 auto' };
+const topbar: React.CSSProperties = { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 12px', border:'1px solid #e5e7eb', borderRadius:12, background:'#fff', marginBottom:12 };
+const link: React.CSSProperties = { textDecoration:'none', color:'#111', padding:'6px 10px', border:'1px solid #e5e7eb', borderRadius:8 };
+const card: React.CSSProperties = { background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:12, margin:'12px 0' };
+const grid2: React.CSSProperties = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 };
+const inp: React.CSSProperties = { width:'100%', padding:'10px 12px', border:'1px solid #cfd3d8', borderRadius:10, fontSize:14, outline:'none' };
+const btnGhost: React.CSSProperties = { padding:'8px 12px', borderRadius:10, border:'1px solid #cfd3d8', background:'#fff', cursor:'pointer' };
+const btnDanger: React.CSSProperties = { padding:'8px 12px', borderRadius:10, border:'1px solid #dc2626', background:'#fef2f2', color:'#b91c1c', cursor:'pointer' };
