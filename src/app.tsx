@@ -1,13 +1,11 @@
 import React from 'react';
-import BusinessCard from './BusinessCard';
 
 export default function App() {
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>CRM для продажи бизнесов</h1>
-      <p>Это первая версия — пока только карточка бизнеса.</p>
-
-      <BusinessCard />
+    <div style={{ padding: 40, textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <h1 style={{ color: 'green' }}>✅ Тест успешен!</h1>
+      <p>Этот текст рендерится из <code>App.tsx</code>.</p>
+      <p>Значит Vite и GitHub Pages работают правильно 🚀</p>
     </div>
   );
 }
