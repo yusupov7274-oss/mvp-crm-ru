@@ -65,3 +65,13 @@ export async function remove(id: string): Promise<void> {
   const list = load().filter(b => b.id !== id);
   save(list);
 }
+export async function listIds(): Promise<string[]> {
+  try {
+    const raw = localStorage.getItem('crm_business_v1');
+    const arr = raw ? JSON.parse(raw) as any[] : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.map(x => x.id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
