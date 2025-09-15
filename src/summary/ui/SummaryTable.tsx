@@ -45,8 +45,8 @@ export default function SummaryTable({ business, canExport }: { business: Busine
   const [fin, setFin] = React.useState<FinancialRecord[]>([]);
   const [fun, setFun] = React.useState<FunnelRecord[]>([]);
   const [enabled, setEnabled] = React.useState<Record<MetricKey, boolean>>(()=> {
-    const init: Record<MetricKey, boolean> = {} as any;
-    METRICS.forEach(m => (init[m.key] = true));
+    const init: any = {};
+    METRICS.forEach(m => init[m.key] = true);
     return init;
   });
 
@@ -59,14 +59,14 @@ export default function SummaryTable({ business, canExport }: { business: Busine
     const set = new Set<string>();
     fin.forEach(r => set.add(`${r.month}.${r.year}`));
     fun.forEach(r => set.add(`${r.month}.${r.year}`));
-    return Array.from(set).sort();
+    return Array.from(set).sort(); // "01.2025", "02.2025", ...
   }, [fin, fun]);
 
   function value(period: string, key: MetricKey): string | number {
     const [m, y] = period.split('.');
     const f = fin.find(r => r.month===m && r.year===y);
     const u = fun.find(r => r.month===m && r.year===y);
-
+    // конверсии и выручки по воронке
     const convML = u && u.leads ? Math.round((u.meetings/u.leads)*100) : 0;
     const convSL = u && u.leads ? Math.round((u.sales/u.leads)*100) : 0;
     const convSM = u && u.meetings ? Math.round((u.sales/u.meetings)*100) : 0;
@@ -101,16 +101,14 @@ export default function SummaryTable({ business, canExport }: { business: Busine
   }
 
   function exportCSV(){
-    const header: (string|number)[] = ['Показатель', ...periods];
-    const rows: (string|number)[][] = [header];
-    METRICS
-      .filter(m => enabled[m.key])
-      .forEach(m => {
-        const row: (string|number)[] = [m.label, ...periods.map(p => value(p, m.key))];
-        rows.push(row);
-      });
-    const csvText: string = toCSV(rows);
-    downloadCSV(`summary_${business.title || business.id}.csv`, csvText);
+    const cols = ['Показатель', ...periods];
+    const rows: any[] = [cols];
+    METRICS.filter(m => enabled[m.key]).forEach(m => {
+      const row = [m.label, ...periods.map(p => value(p, m.key))];
+      rows.push(row);
+    });
+    const csv = toCSV(rows);
+    downloadCSV(`summary_${business.title || business.id}.csv`, csv);
   }
 
   return (
@@ -123,11 +121,7 @@ export default function SummaryTable({ business, canExport }: { business: Busine
       <div style={{display:'flex', flexWrap:'wrap', gap:8, marginBottom:8}}>
         {METRICS.map(m => (
           <label key={m.key} style={chip}>
-            <input
-              type="checkbox"
-              checked={enabled[m.key]}
-              onChange={e=>setEnabled({...enabled, [m.key]: e.target.checked})}
-            />
+            <input type="checkbox" checked={enabled[m.key]} onChange={e=>setEnabled({...enabled, [m.key]: e.target.checked})}/>
             <span>{m.label}</span>
           </label>
         ))}
