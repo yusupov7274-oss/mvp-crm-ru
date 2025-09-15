@@ -5,21 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CRM для продажи бизнесов</title>
   </head>
- 
   <body>
-     <script>
-  const el = document.getElementById('root');
-  if (el) el.innerHTML = '<p style="text-align:center">🧪 JS исполнился. Если React ниже не появился — значит не загрузился бандл.</p>';
-</script>
-    <!-- Тестовый маячок, чтобы видеть, что index.html точно отдался -->
-    <h1 style="padding:16px;background:#222;color:#0f0;text-align:center;">
-      ТЕСТ: index.html отрендерился
-    </h1>
-
-    <!-- Здесь будет жить React -->
     <div id="root"></div>
-
-    <!-- Подключение React-приложения -->
+    <!-- В режиме билда Vite сам подменит этот путь на /mvp-crm-ru/assets/....js -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
