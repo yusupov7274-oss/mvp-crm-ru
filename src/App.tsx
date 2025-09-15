@@ -1,5 +1,4 @@
-// ДОПОЛНЕНИЕ: маршруты для финансов и встраивание FinancialsCard
-// Замените СОДЕРЖИМОЕ src/App.tsx на это (остальной проект не трогаем)
+// ДОБАВЛЕНО: маршрут #/funnel/:id и кнопка перехода из карточки бизнеса
 
 import React from 'react';
 import { AuthProvider, LoginScreen, useAuth } from './AuthGate';
@@ -9,13 +8,15 @@ import BusinessPool from './business/ui/BusinessPool';
 import * as bizRepo from './business/repo.local';
 import { Business } from './business/types';
 import FinancialsCard from './financials/ui/FinancialsCard';
+import FunnelCard from './funnel/ui/FunnelCard';
 
 /* ───────────── Hash-роутер ───────────── */
 type Route =
   | { name: 'home' }
   | { name: 'pool' }
   | { name: 'business'; id: string }
-  | { name: 'financials'; id: string };
+  | { name: 'financials'; id: string }
+  | { name: 'funnel'; id: string };
 
 function parseHash(): Route {
   const h = (location.hash || '').replace(/^#/, '');
@@ -24,6 +25,7 @@ function parseHash(): Route {
   if (a === 'pool') return { name: 'pool' };
   if (a === 'business' && b) return { name: 'business', id: b };
   if (a === 'financials' && b) return { name: 'financials', id: b };
+  if (a === 'funnel' && b) return { name: 'funnel', id: b };
   return { name: 'home' };
 }
 function useHashRoute(): [Route] {
@@ -101,7 +103,10 @@ function BusinessCardScreen({ id }: { id: string }) {
           <button style={btnDanger} onClick={unassign}>Снять ответственного (в биржу)</button>
         )}
         {perms?.viewFinancials && (
-          <a style={btnPrimary as any} href={`#/financials/${b.id}`}>Перейти к финансам</a>
+          <a style={btnPrimary as any} href={`#/financials/${b.id}`}>Финансы</a>
+        )}
+        {perms?.viewFunnel && (
+          <a style={btnPrimary as any} href={`#/funnel/${b.id}`}>Воронка</a>
         )}
       </div>
     </div>
@@ -113,9 +118,7 @@ function FinancialsScreen({ id }: { id: string }) {
   const { perms } = useAuth();
   const [biz, setBiz] = React.useState<Business | null>(null);
 
-  React.useEffect(()=>{
-    bizRepo.get(id).then(setBiz);
-  }, [id]);
+  React.useEffect(()=>{ bizRepo.get(id).then(setBiz); }, [id]);
 
   if (!perms?.viewFinancials) return <div style={{padding:12, color:'#b91c1c'}}>Нет прав доступа</div>;
   if (!biz) return <div style={{padding:12}}>Загрузка…</div>;
@@ -127,6 +130,27 @@ function FinancialsScreen({ id }: { id: string }) {
         <a style={btnGhost as any} href={`#/business/${biz.id}`}>К карточке бизнеса</a>
       </div>
       <FinancialsCard businessId={biz.id} canEdit={!!perms.editFinancials}/>
+    </div>
+  );
+}
+
+/* ───────────── Экран воронки ───────────── */
+function FunnelScreen({ id }: { id: string }) {
+  const { perms } = useAuth();
+  const [biz, setBiz] = React.useState<Business | null>(null);
+
+  React.useEffect(()=>{ bizRepo.get(id).then(setBiz); }, [id]);
+
+  if (!perms?.viewFunnel) return <div style={{padding:12, color:'#b91c1c'}}>Нет прав доступа</div>;
+  if (!biz) return <div style={{padding:12}}>Загрузка…</div>;
+
+  return (
+    <div>
+      <div style={rowBetween}>
+        <h2 style={{margin:0}}>Воронка: {biz.title || 'Без названия'}</h2>
+        <a style={btnGhost as any} href={`#/business/${biz.id}`}>К карточке бизнеса</a>
+      </div>
+      <FunnelCard businessId={biz.id} canEdit={!!perms.editFunnel}/>
     </div>
   );
 }
@@ -159,12 +183,10 @@ function Shell(){
     <div style={page}>
       <NavBar />
       {route.name === 'home' && <BusinessList />}
-      {route.name === 'pool' && (perms.assignBusinesses
-        ? <BusinessPool />
-        : <div style={{padding:12, color:'#b91c1c'}}>Нет прав доступа</div>
-      )}
+      {route.name === 'pool' && <BusinessPool />}
       {route.name === 'business' && <BusinessCardScreen id={route.id} />}
       {route.name === 'financials' && <FinancialsScreen id={route.id} />}
+      {route.name === 'funnel' && <FunnelScreen id={route.id} />}
     </div>
   );
 }
@@ -177,7 +199,7 @@ export default function App(){
   );
 }
 
-/* ───────────── Мелкие утилиты/стили ───────────── */
+/* ───────────── Утилиты/стили ───────────── */
 function Field(p:{label:string; children:React.ReactNode; span2?:boolean}){
   return <label style={{display:'block', gridColumn: p.span2?'1 / span 2': undefined}}>
     <div style={{fontSize:12, color:'#6b7280', margin:'8px 0 4px'}}>{p.label}</div>
