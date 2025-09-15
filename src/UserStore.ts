@@ -7,9 +7,10 @@ export type UserRecord = {
   id: string;
   name: string;
   role: Role;
-  login: string;           // уникальный логин
-  passwordHash: string;    // простейший хэш (демо)
+  login: string;            // уникальный логин
+  passwordHash: string;     // простейший хэш (демо)
   permsOverride?: Partial<Permissions>; // переопределение прав
+  businessIds?: string[];   // область видимости менеджера: какие бизнесы видит/ведёт
 };
 
 const USERS_KEY = 'crm_users_v1';
@@ -27,6 +28,8 @@ function load(): UserRecord[] {
   try {
     const raw = localStorage.getItem(USERS_KEY);
     const users = raw ? JSON.parse(raw) as UserRecord[] : [];
+    // нормализуем businessIds = []
+    users.forEach(u => { if (!Array.isArray(u.businessIds)) u.businessIds = []; });
     return Array.isArray(users) ? users : [];
   } catch { return []; }
 }
@@ -47,6 +50,7 @@ function ensureSeedOwner(){
       login: 'boss',
       passwordHash: hash('boss123'), // поменяйте в панели пользователей
       permsOverride: {},
+      businessIds: [],               // владелец видит все, но поле пусть будет
     });
     save(list);
   }
@@ -64,7 +68,11 @@ export function authenticate(login: string, password: string): UserRecord | null
   return (u.passwordHash === hash(password)) ? u : null;
 }
 
-export function addUser(input: { name: string; role: Role; login: string; password: string; permsOverride?: Partial<Permissions> }){
+export function addUser(input: {
+  name: string; role: Role; login: string; password: string;
+  permsOverride?: Partial<Permissions>;
+  businessIds?: string[];
+}){
   const list = load();
   if (list.some(u => u.login === input.login)) throw new Error('Логин уже используется');
   const rec: UserRecord = {
@@ -74,22 +82,31 @@ export function addUser(input: { name: string; role: Role; login: string; passwo
     login: input.login.trim(),
     passwordHash: hash(input.password),
     permsOverride: input.permsOverride || {},
+    businessIds: Array.isArray(input.businessIds) ? input.businessIds.slice() : [],
   };
   list.push(rec);
   save(list);
   return rec;
 }
 
-export function updateUser(id: string, patch: Partial<Omit<UserRecord, 'id' | 'passwordHash'>> & { password?: string }){
+export function updateUser(
+  id: string,
+  patch: Partial<Omit<UserRecord, 'id' | 'passwordHash'>> & { password?: string }
+){
   const list = load();
   const i = list.findIndex(u=>u.id===id);
   if (i<0) throw new Error('Пользователь не найден');
   const prev = list[i];
+
   const next: UserRecord = {
     ...prev,
     ...patch,
+    // если передан пароль — пересчитаем хэш
     passwordHash: patch.password ? hash(patch.password) : prev.passwordHash,
+    // нормализуем businessIds
+    businessIds: Array.isArray(patch.businessIds) ? patch.businessIds.slice() : (prev.businessIds || []),
   };
+
   list[i] = next;
   save(list);
   return next;
